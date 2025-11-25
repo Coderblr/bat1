@@ -1,85 +1,228 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import path from 'path';
-import XLSX from 'xlsx';
-import fs from 'fs';
+import React, { useState } from 'react';
+import { AlertCircle, Download, Loader2, FileSpreadsheet } from 'lucide-react';
 
-const execPromise = promisify(exec);
+export default function BatExcelViewer() {
+  const [formData, setFormData] = useState({
+    regionName: '',
+    cifNumber: '',
+    productCode: '',
+    accountSegment: '',
+    noOfAccounts: ''
+  });
+  const [loading, setLoading] = useState(false);
+  const [excelData, setExcelData] = useState(null);
+  const [error, setError] = useState('');
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
 
-  const { regionName, cifNumber, productCode, accountSegment, noOfAccounts } = req.body;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setExcelData(null);
 
-  // Validate inputs
-  if (!regionName || !cifNumber || !productCode || !accountSegment || !noOfAccounts) {
-    return res.status(400).json({ error: 'All fields are required' });
-  }
+    try {
+      // Call your API endpoint that executes the BAT file
+      const response = await fetch('/api/execute-bat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
 
-  try {
-    // Path to your BAT file
-    const batFilePath = path.join(process.cwd(), 'scripts', 'your-script.bat');
-    
-    // Path where the Excel output will be generated
-    const outputPath = path.join(process.cwd(), 'output', 'report.xlsx');
+      if (!response.ok) {
+        throw new Error('Failed to execute BAT file');
+      }
 
-    // Execute the BAT file with parameters
-    const command = `"${batFilePath}" "${regionName}" "${cifNumber}" "${productCode}" "${accountSegment}" "${noOfAccounts}"`;
-    
-    console.log('Executing command:', command);
-    
-    const { stdout, stderr } = await execPromise(command);
-    
-    if (stderr) {
-      console.error('BAT file stderr:', stderr);
+      const data = await response.json();
+      setExcelData(data);
+    } catch (err) {
+      setError(err.message || 'An error occurred while processing your request');
+    } finally {
+      setLoading(false);
     }
-    
-    console.log('BAT file stdout:', stdout);
+  };
 
-    // Wait a bit for the file to be written
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Check if output file exists
-    if (!fs.existsSync(outputPath)) {
-      throw new Error('Output file was not generated');
-    }
-
-    // Read the Excel file
-    const workbook = XLSX.readFile(outputPath);
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    
-    // Convert to JSON
-    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-    
-    // Extract headers and rows
-    const headers = jsonData[0] || [];
-    const rows = jsonData.slice(1);
-
-    // Clean up the output file (optional)
-    // fs.unlinkSync(outputPath);
-
-    return res.status(200).json({
-      headers,
-      rows,
-      success: true
+  const handleReset = () => {
+    setFormData({
+      regionName: '',
+      cifNumber: '',
+      productCode: '',
+      accountSegment: '',
+      noOfAccounts: ''
     });
+    setExcelData(null);
+    setError('');
+  };
 
-  } catch (error) {
-    console.error('Error executing BAT file:', error);
-    return res.status(500).json({ 
-      error: 'Failed to execute BAT file',
-      details: error.message 
-    });
-  }
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+      <div className="max-w-6xl mx-auto">
+        <div className="bg-white rounded-lg shadow-xl p-8 mb-6">
+          <div className="flex items-center gap-3 mb-6">
+            <FileSpreadsheet className="w-8 h-8 text-indigo-600" />
+            <h1 className="text-3xl font-bold text-gray-800">Database Report Generator</h1>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Region Name
+                </label>
+                <input
+                  type="text"
+                  name="regionName"
+                  value={formData.regionName}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Enter region name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  CIF Number
+                </label>
+                <input
+                  type="text"
+                  name="cifNumber"
+                  value={formData.cifNumber}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Enter CIF number"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Product Code
+                </label>
+                <input
+                  type="text"
+                  name="productCode"
+                  value={formData.productCode}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Enter product code"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Account Segment
+                </label>
+                <input
+                  type="text"
+                  name="accountSegment"
+                  value={formData.accountSegment}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Enter account segment"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Number of Accounts
+                </label>
+                <input
+                  type="number"
+                  name="noOfAccounts"
+                  value={formData.noOfAccounts}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Enter number of accounts"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-1 bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  'Generate Report'
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="px-6 py-3 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+              >
+                Reset
+              </button>
+            </div>
+          </form>
+
+          {error && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-red-800">{error}</p>
+            </div>
+          )}
+        </div>
+
+        {excelData && (
+          <div className="bg-white rounded-lg shadow-xl p-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Report Results</h2>
+              <button className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                <Download className="w-4 h-4" />
+                Export Excel
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-100">
+                    {excelData.headers?.map((header, idx) => (
+                      <th key={idx} className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {excelData.rows?.map((row, rowIdx) => (
+                    <tr key={rowIdx} className="hover:bg-gray-50">
+                      {row.map((cell, cellIdx) => (
+                        <td key={cellIdx} className="border border-gray-300 px-4 py-3 text-gray-600">
+                          {cell}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {excelData.rows?.length === 0 && (
+              <p className="text-center text-gray-500 py-8">No data found</p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
-
-// Increase timeout for long-running operations
-export const config = {
-  api: {
-    responseLimit: false,
-    externalResolver: true,
-  },
-};
